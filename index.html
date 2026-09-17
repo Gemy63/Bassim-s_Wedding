@@ -1553,7 +1553,7 @@ button,a{
 <!-- MUSIC BUTTON -->
 <button class="music" id="musicBtn" aria-label="الموسيقى">♪</button>
 
-<audio id="music" preload="auto" loop>
+<audio id="music" preload="auto" loop playsinline webkit-playsinline="true" x-webkit-airplay="allow">
     <source src="wedding.mp3" type="audio/mpeg">
 </audio>
 
@@ -1573,6 +1573,34 @@ const music = document.getElementById("music");
 const musicBtn = document.getElementById("musicBtn");
 
 let opened = false;
+
+
+/* =====================================================
+   iOS AUDIO UNLOCK
+   الآيفون بيمنع تشغيل الصوت لحد ما يحصل تفاعل حقيقي
+   من المستخدم، وأحياناً أول لمسة (تاتش) مش كافية لوحدها
+   عشان تفتح "قناة الصوت" قبل ما نطلب التشغيل الفعلي.
+   الكود ده بيفتح القناة فور أول لمسة/كليك في أي مكان
+   بالصفحة (قبل ما نلمس الختم نفسه)، فيضمن إن الصوت
+   يشتغل عادي لما نطلب تشغيله بعدها.
+===================================================== */
+
+let audioUnlocked = false;
+
+function unlockAudio(){
+    if(audioUnlocked) return;
+    audioUnlocked = true;
+
+    music.play()
+        .then(()=>{
+            music.pause();
+            music.currentTime = 0;
+        })
+        .catch(()=>{});
+}
+
+document.addEventListener("touchstart", unlockAudio, {capture:true, once:true, passive:true});
+document.addEventListener("click", unlockAudio, {capture:true, once:true});
 
 
 /* =====================================================
@@ -1614,36 +1642,52 @@ function openInvitation(){
    MUSIC
 ===================================================== */
 
+function startFade(){
+
+    musicBtn.classList.add("show");
+    musicBtn.textContent="❚❚";
+
+    const start = performance.now();
+    const duration = 2300;
+
+    function fade(now){
+
+        let progress = (now-start)/duration;
+        progress = Math.max(0, Math.min(1, progress));
+
+        music.volume = 1-Math.pow(1-progress, 3);
+
+        if(progress<1){
+            requestAnimationFrame(fade);
+        }
+    }
+
+    requestAnimationFrame(fade);
+}
+
 function playMusic(){
 
     music.currentTime=0;
     music.volume=0;
 
     music.play()
-        .then(()=>{
+        .then(startFade)
+        .catch(()=>{
 
-            musicBtn.classList.add("show");
-            musicBtn.textContent="❚❚";
+            /* لو التشغيل فشل (بيحصل أحياناً في السفاري على
+               الآيفون من أول مرة)، بنعيد المحاولة تلقائياً
+               مع أول لمسة/كليك تاني من المستخدم بدل ما
+               الصوت يفضل واقف للأبد */
 
-            const start = performance.now();
-            const duration = 2300;
+            const retryPlay = ()=>{
+                music.currentTime = 0;
+                music.volume = 0;
+                music.play().then(startFade).catch(()=>{});
+            };
 
-            function fade(now){
-
-                let progress = (now-start)/duration;
-                progress = Math.max(0, Math.min(1, progress));
-
-                music.volume = 1-Math.pow(1-progress, 3);
-
-                if(progress<1){
-                    requestAnimationFrame(fade);
-                }
-            }
-
-            requestAnimationFrame(fade);
-
-        })
-        .catch(()=>{});
+            document.addEventListener("touchend", retryPlay, {once:true});
+            document.addEventListener("click", retryPlay, {once:true});
+        });
 }
 
 
